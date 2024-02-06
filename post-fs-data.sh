@@ -18,15 +18,7 @@ echo "[$(date +%F) $(date +%T)] - ProxyPinCA post-fs-data.sh start." > $LOG_PATH
 
 if [ -d /apex/com.android.conscrypt/cacerts ]; then
     # 检测到 android 14 以上，存在该证书目录
-    CERT_HASH=243f0bfb
     MODDIR=${0%/*}
-
-    CERT_FILE=${MODDIR}/system/etc/security/cacerts/${CERT_HASH}.0
-    echo "[$(date +%F) $(date +%T)] - CERT_FILE: ${CERT_FILE}" >> $LOG_PATH
-    if ! [ -e "${CERT_FILE}" ]; then
-        echo "[$(date +%F) $(date +%T)] - ProxyPinCA certificate not found." >> $LOG_PATH
-        exit 0
-    fi
 
     TEMP_DIR=/data/local/tmp/cacerts-copy
     rm -rf "$TEMP_DIR"
@@ -34,15 +26,26 @@ if [ -d /apex/com.android.conscrypt/cacerts ]; then
     mount -t tmpfs tmpfs "$TEMP_DIR"
 
     # 复制证书到临时目录
-    cp -f /apex/com.android.conscrypt/cacerts/* /data/local/tmp/cacerts-copy/
-    cp -f $CERT_FILE "$TEMP_DIR"
+    cp -f /apex/com.android.conscrypt/cacerts/* "$TEMP_DIR"
+
+    for file in ./system/etc/security/cacerts/*; do
+        CERT_FILE="${MODDIR}/${file}"
+        echo "[$(date +%F) $(date +%T)] - CERT_FILE: ${CERT_FILE}" >> $LOG_PATH
+        if [ -e "${CERT_FILE}" ]; then
+            chmod 644 $CERT_FILE
+            chown root:root $CERT_FILE
+            cp -f $CERT_FILE "$TEMP_DIR"
+        else
+            echo "[$(date +%F) $(date +%T)] - ProxyPinCA certificate ${CERT_HASH} not found." >> $LOG_PATH
+        fi
+    done
 
     chown -R 0:0 "$TEMP_DIR"
     set_context /apex/com.android.conscrypt/cacerts "$TEMP_DIR"
 
     # 检查新证书是否成功添加
-    CERTS_NUM="$(ls -1 /data/local/tmp/cacerts-copy | wc -l)"
-    if [ "$CERTS_NUM" -gt 10 ]; then
+    CERTS_NUM="$(ls -1 $TEMP_DIR | wc -l)"
+    if [ "$CERTS_NUM" -gt 10 ]; then # 假设至少需要有11个证书才算成功
         mount -o bind "$TEMP_DIR" /apex/com.android.conscrypt/cacerts
         echo "[$(date +%F) $(date +%T)] - $CERTS_NUM Mount success!" >> $LOG_PATH
     else
@@ -53,5 +56,5 @@ if [ -d /apex/com.android.conscrypt/cacerts ]; then
     umount "$TEMP_DIR"
     rmdir "$TEMP_DIR"
 else
-    echo "[$(date +%F) $(date +%T)] - /apex/com.android.conscrypt/cacerts not exists."
+    echo "[$(date +%F) $(date +%T)] - /apex/com.android.conscrypt/cacerts not exists." >> $LOG_PATH
 fi
