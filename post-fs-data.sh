@@ -55,9 +55,9 @@ if [ -d /apex/com.android.conscrypt/cacerts ]; then
             nsenter --mount=/proc/${pid}/ns/mnt -- \
                 mount --bind "$TEMP_DIR" /apex/com.android.conscrypt/cacerts
         done
-        echo "[$(date +%F) $(date +%T)] - $CERTS_NUM Mount success!"
+        echo "[$(date +%F) $(date +%T)] - Mount success!"
     else
-        echo "[$(date +%F) $(date +%T)] - $CERTS_NUM Mount failed!"
+        echo "[$(date +%F) $(date +%T)] - Mount failed!"
     fi
 
     # 卸载临时目录
