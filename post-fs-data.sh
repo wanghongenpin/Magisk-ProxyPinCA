@@ -1,70 +1,137 @@
 #!/system/bin/sh
-
-
-exec > /data/local/tmp/ProxyPinCA.log
-exec 2>&1
-
-#set -x
+# ProxyPin Certificate Installer - Post-fs-data Script
+# Author: firdausmntp
+# GitHub: https://github.com/firdausmntp/ProxyPin-cert-installer
+#
+# Android 14+ APEX Bypass - Aggressive Implementation
 
 MODDIR=${0%/*}
+LOG_FILE="/data/local/tmp/ProxyPinCert.log"
+CERT_DIR="${MODDIR}/system/etc/security/cacerts"
+TEMP_DIR="/data/local/tmp/proxypin-apex-ca"
 
-set_context() {
-    [ "$(getenforce)" = "Enforcing" ] || return 0
+# Initialize logging
+mkdir -p /data/local/tmp 2>/dev/null
+echo "" > "$LOG_FILE"
 
-    default_selinux_context=u:object_r:system_file:s0
-    selinux_context=$(ls -Zd $1 | awk '{print $1}')
-
-    if [ -n "$selinux_context" ] && [ "$selinux_context" != "?" ]; then
-        chcon -R $selinux_context $2
-    else
-        chcon -R $default_selinux_context $2
-    fi
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
-#LOG_PATH="/data/local/tmp/ProxyPinCA.log"
-echo "[$(date +%F) $(date +%T)] - ProxyPinCA post-fs-data.sh start."
-chown -R 0:0 ${MODDIR}/system/etc/security/cacerts
-if [ -d /apex/com.android.conscrypt/cacerts ]; then
-    # 检测到 android 14 以上，存在该证书目录
-    CERT_HASH=243f0bfb
+log "╔══════════════════════════════════════════════════════╗"
+log "║  ProxyPin Certificate Installer v1.0                 ║"
+log "╚══════════════════════════════════════════════════════╝"
+log ""
+log "Post-fs-data started"
+log "Module: $MODDIR"
 
-    CERT_FILE=${MODDIR}/system/etc/security/cacerts/${CERT_HASH}.0
-    echo "[$(date +%F) $(date +%T)] - CERT_FILE: ${CERT_FILE}"
-    if ! [ -e "${CERT_FILE}" ]; then
-        echo "[$(date +%F) $(date +%T)] - ProxyPinCA certificate not found."
-        exit 0
-    fi
+API=$(getprop ro.build.version.sdk)
+ANDROID_VERSION=$(getprop ro.build.version.release)
+log "Android: $ANDROID_VERSION (API $API)"
 
-    TEMP_DIR=/data/local/tmp/cacerts-copy
-    rm -rf "$TEMP_DIR"
-    mkdir -p -m 700 "$TEMP_DIR"
-    mount -t tmpfs tmpfs "$TEMP_DIR"
-
-    # 复制证书到临时目录
-    cp -f /apex/com.android.conscrypt/cacerts/* "$TEMP_DIR"
-    cp -f $CERT_FILE "$TEMP_DIR"
-
-    chown -R 0:0 "$TEMP_DIR"
-    set_context /apex/com.android.conscrypt/cacerts "$TEMP_DIR"
-
-    # 检查新证书是否成功添加
-    CERTS_NUM="$(ls -1 "$TEMP_DIR" | wc -l)"
-    if [ "$CERTS_NUM" -gt 10 ]; then
-        mount -o bind "$TEMP_DIR" /apex/com.android.conscrypt/cacerts
-         for pid in 1 $(pgrep zygote) $(pgrep zygote64); do
-            nsenter --mount=/proc/${pid}/ns/mnt -- \
-                mount --bind "$TEMP_DIR" /apex/com.android.conscrypt/cacerts
-        done
-        echo "[$(date +%F) $(date +%T)] - Mount success!"
-    else
-        echo "[$(date +%F) $(date +%T)] - Mount failed!"
-    fi
-
-    # 卸载临时目录
-    umount "$TEMP_DIR"
-    rmdir "$TEMP_DIR"
+# Detect root
+if [ "$KSU" = "true" ]; then
+    log "Root: KernelSU/SukiSU (v$KSU_VER_CODE)"
+elif [ "$APATCH" = "true" ]; then
+    log "Root: APatch (v$APATCH_VER_CODE)"
 else
-    echo "[$(date +%F) $(date +%T)] - Android version lower than 14 detected"
-    set_context /system/etc/security/cacerts ${MODDIR}/system/etc/security/cacerts 
-    echo "[$(date +%F) $(date +%T)] - Mount success!"
+    log "Root: Magisk/Other"
 fi
+
+# Find our certificate
+CERT_FILE=$(find "$CERT_DIR" -maxdepth 1 -type f -name "*.0" 2>/dev/null | head -1)
+CERT_NAME=$(basename "$CERT_FILE" 2>/dev/null)
+
+if [ -z "$CERT_FILE" ] || [ ! -f "$CERT_FILE" ]; then
+    log "ERROR: No certificate file found in $CERT_DIR"
+    log "Certificate 243f0bfb.0 is missing. Try reinstalling the module."
+    exit 0
+fi
+
+log "Certificate: $CERT_NAME"
+
+# For Android < 14, Magic Mount handles it
+if [ "$API" -lt 34 ]; then
+    log "Android < 14: Using Magic Mount"
+    log "Done!"
+    exit 0
+fi
+
+log ""
+log "=== Android 14+ APEX Injection ==="
+
+APEX_CACERTS="/apex/com.android.conscrypt/cacerts"
+
+if [ ! -d "$APEX_CACERTS" ]; then
+    log "ERROR: APEX cacerts not found"
+    exit 1
+fi
+
+# Prepare temp directory with tmpfs
+log "Preparing tmpfs..."
+umount "$TEMP_DIR" 2>/dev/null
+rm -rf "$TEMP_DIR" 2>/dev/null
+mkdir -p "$TEMP_DIR"
+
+if ! mount -t tmpfs tmpfs "$TEMP_DIR"; then
+    log "ERROR: Failed to mount tmpfs"
+    exit 1
+fi
+
+# Copy existing certs
+log "Copying system certificates..."
+cp -a "$APEX_CACERTS"/* "$TEMP_DIR/" 2>/dev/null
+ORIG_COUNT=$(ls -1 "$TEMP_DIR"/*.0 2>/dev/null | wc -l)
+log "System certs: $ORIG_COUNT"
+
+# Add our certificate
+log "Adding: $CERT_NAME"
+cp -f "$CERT_FILE" "$TEMP_DIR/$CERT_NAME"
+
+# Set permissions
+chown -R 0:0 "$TEMP_DIR"
+chmod 755 "$TEMP_DIR"
+chmod 644 "$TEMP_DIR"/*
+
+# Set SELinux context
+APEX_CONTEXT=$(ls -Zd "$APEX_CACERTS" 2>/dev/null | awk '{print $1}')
+if [ -n "$APEX_CONTEXT" ] && [ "$APEX_CONTEXT" != "?" ]; then
+    chcon -R "$APEX_CONTEXT" "$TEMP_DIR" 2>/dev/null
+    log "SELinux context: $APEX_CONTEXT"
+fi
+
+TOTAL_COUNT=$(ls -1 "$TEMP_DIR"/*.0 2>/dev/null | wc -l)
+log "Total certs: $TOTAL_COUNT"
+
+# Mount to APEX - try multiple approaches
+log ""
+log "Mounting to APEX..."
+
+# 1. Global mount
+mount --bind "$TEMP_DIR" "$APEX_CACERTS" && log "✓ Global mount"
+
+# 2. Init namespace (PID 1)
+nsenter --mount=/proc/1/ns/mnt -- mount --bind "$TEMP_DIR" "$APEX_CACERTS" 2>/dev/null && log "✓ Init (PID 1)"
+
+# 3. Zygote namespaces - critical for apps
+for zygote in zygote zygote64; do
+    PID=$(pidof "$zygote" 2>/dev/null)
+    if [ -n "$PID" ]; then
+        nsenter --mount=/proc/$PID/ns/mnt -- mount --bind "$TEMP_DIR" "$APEX_CACERTS" 2>/dev/null && log "✓ $zygote (PID $PID)"
+    fi
+done
+
+# 4. Keep post-fs-data lightweight; service.sh handles targeted post-boot app namespaces.
+log "Deferred per-app namespace injection to service.sh"
+
+# Verify
+log ""
+if [ -f "$APEX_CACERTS/$CERT_NAME" ]; then
+    log "✓ SUCCESS: $CERT_NAME is in APEX!"
+else
+    log "✗ Certificate not visible in APEX (namespace isolation)"
+fi
+
+log ""
+log "Post-fs-data completed"
+log "══════════════════════════════════════════════════════"

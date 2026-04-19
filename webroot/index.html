@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ProxyPin Certificate Manager</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        :root {
+            --bg: #0f1118;
+            --surface: #181a24;
+            --surface-2: #1e2130;
+            --surface-3: #252838;
+            --border: #2a2d3a;
+            --text: #e2e4ea;
+            --text-2: #9196a8;
+            --text-3: #5e6374;
+            --primary: #5b7bf7;
+            --primary-dim: rgba(91, 123, 247, 0.12);
+            --green: #3ddc84;
+            --green-dim: rgba(61, 220, 132, 0.12);
+            --red: #f25555;
+            --red-dim: rgba(242, 85, 85, 0.12);
+            --yellow: #f5c542;
+            --yellow-dim: rgba(245, 197, 66, 0.12);
+        }
+
+        body {
+            font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .app {
+            max-width: 460px;
+            margin: 0 auto;
+            padding: 0 16px 32px;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--bg);
+        }
+
+        .toolbar-title {
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        .toolbar-version {
+            font-size: 12px;
+            color: var(--text-3);
+            background: var(--surface);
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+
+        /* Section */
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .section-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 0 4px;
+            margin-bottom: 8px;
+        }
+
+        /* Card base */
+        .card {
+            background: var(--surface);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        /* Status rows */
+        .status-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .status-row:last-child {
+            border-bottom: none;
+        }
+
+        .status-row .label {
+            font-size: 14px;
+            color: var(--text-2);
+        }
+
+        .status-row .value {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .chip.ok   { background: var(--green-dim); color: var(--green); }
+        .chip.warn { background: var(--yellow-dim); color: var(--yellow); }
+        .chip.err  { background: var(--red-dim); color: var(--red); }
+        .chip.info { background: var(--primary-dim); color: var(--primary); }
+        .chip .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* Upload area */
+        .upload-card {
+            background: var(--surface);
+            border-radius: 14px;
+            padding: 20px 16px;
+        }
+
+        .upload-area {
+            border: 1.5px dashed var(--border);
+            border-radius: 10px;
+            padding: 28px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            position: relative;
+        }
+
+        .upload-area:active,
+        .upload-area.over {
+            border-color: var(--primary);
+            background: var(--primary-dim);
+        }
+
+        .upload-area input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .upload-area .ic {
+            font-size: 28px;
+            opacity: 0.8;
+            margin-bottom: 8px;
+        }
+
+        .upload-area .t1 {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-2);
+        }
+
+        .upload-area .t2 {
+            font-size: 12px;
+            color: var(--text-3);
+            margin-top: 4px;
+        }
+
+        /* Selected file */
+        .file-row {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            margin-top: 14px;
+            padding: 12px;
+            background: var(--surface-2);
+            border-radius: 10px;
+        }
+
+        .file-row.show { display: flex; }
+
+        .file-row .name {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-row .size {
+            font-size: 11px;
+            color: var(--text-3);
+        }
+
+        .file-row .rm {
+            width: 28px; height: 28px;
+            border: none;
+            background: var(--red-dim);
+            color: var(--red);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Buttons */
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 13px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            -webkit-user-select: none;
+        }
+
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.4; pointer-events: none; }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            margin-top: 14px;
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text-2);
+            border: 1px solid var(--border);
+        }
+
+        .btn-outline:active {
+            background: var(--surface-2);
+        }
+
+        .btn-danger {
+            background: var(--red);
+            color: #fff;
+        }
+
+        /* Action list */
+        .action-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.15s;
+            -webkit-user-select: none;
+        }
+
+        .action-item:last-child { border-bottom: none; }
+        .action-item:active { background: var(--surface-2); }
+
+        .action-item .a-icon {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            flex-shrink: 0;
+        }
+
+        .action-item .a-icon.blue  { background: var(--primary-dim); }
+        .action-item .a-icon.amber { background: var(--yellow-dim); }
+        .action-item .a-icon.red   { background: var(--red-dim); }
+        .action-item .a-icon.green { background: var(--green-dim); }
+
+        .action-item .a-text .a-title {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .action-item .a-text .a-desc {
+            font-size: 12px;
+            color: var(--text-3);
+            margin-top: 1px;
+        }
+
+        .action-item .arrow {
+            margin-left: auto;
+            color: var(--text-3);
+            font-size: 14px;
+        }
+
+        /* Logs */
+        .log-box {
+            display: none;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin: 12px 16px 16px;
+            padding: 12px;
+            max-height: 260px;
+            overflow-y: auto;
+            font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 11px;
+            line-height: 1.7;
+            color: var(--text-3);
+        }
+
+        .log-box.show { display: block; }
+
+        .log-box::-webkit-scrollbar { width: 3px; }
+        .log-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .log-box .l { padding: 1px 0; word-break: break-all; }
+        .log-box .l.g { color: var(--green); }
+        .log-box .l.r { color: var(--red); }
+        .log-box .l.y { color: var(--yellow); }
+        .log-box .l.b { color: var(--primary); }
+
+        /* Progress */
+        .progress {
+            height: 3px;
+            background: var(--surface-3);
+            border-radius: 3px;
+            margin-top: 12px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress.show { display: block; }
+        .progress .bar {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+
+        /* Toast */
+        .toast-wrap {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            width: calc(100% - 32px);
+            max-width: 428px;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 13px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            pointer-events: auto;
+            animation: tIn 0.3s ease;
+            margin-top: 8px;
+        }
+
+        .toast.ok  { background: #1a2e22; border: 1px solid #264d35; color: var(--green); }
+        .toast.err { background: #2e1a1a; border: 1px solid #4d2626; color: var(--red); }
+        .toast.inf { background: #1a1e2e; border: 1px solid #26354d; color: var(--primary); }
+        .toast.out { animation: tOut 0.25s ease forwards; }
+
+        @keyframes tIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes tOut { to { opacity: 0; transform: translateY(8px); } }
+
+        /* Modal */
+        .modal-bg {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 50;
+            align-items: flex-end;
+            justify-content: center;
+            padding: 16px;
+        }
+        .modal-bg.show { display: flex; }
+
+        .modal-box {
+            background: var(--surface);
+            border-radius: 18px;
+            width: 100%;
+            max-width: 400px;
+            padding: 24px 20px;
+            animation: mIn 0.25s ease;
+        }
+
+        @keyframes mIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+
+        .modal-box h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+        .modal-box p  { font-size: 13px; color: var(--text-2); margin-bottom: 18px; }
+        .modal-box .btns { display: flex; gap: 10px; }
+        .modal-box .btns .btn { flex: 1; }
+
+        /* Spinner */
+        .spin {
+            width: 15px; height: 15px;
+            border: 2px solid rgba(255,255,255,0.25);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: sp 0.6s linear infinite;
+            display: inline-block;
+        }
+        @keyframes sp { to { transform: rotate(360deg); } }
+
+        /* Footer */
+        .foot {
+            text-align: center;
+            padding: 16px 0 8px;
+            font-size: 11px;
+            color: var(--text-3);
+        }
+        .foot a { color: var(--text-2); text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="toast-wrap" id="toasts"></div>
+
+    <div class="modal-bg" id="rebootModal">
+        <div class="modal-box">
+            <h3>Reboot device?</h3>
+            <p>Device will restart to apply certificate changes. Make sure all work is saved.</p>
+            <div class="btns">
+                <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="doReboot()">Reboot</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app">
+        <div class="toolbar">
+            <span class="toolbar-title">ProxyPin Cert Manager</span>
+            <span class="toolbar-version">v1.0</span>
+        </div>
+
+        <!-- Status -->
+        <div class="section">
+            <div class="section-label">Status</div>
+            <div class="card">
+                <div class="status-row">
+                    <span class="label">Module</span>
+                    <span id="sModule"><span class="chip info"><span class="dot"></span> checking</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="label">Certificate</span>
+                    <span id="sCert"><span class="chip info"><span class="dot"></span> checking</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="label">APEX Injection</span>
+                    <span id="sApex"><span class="chip info"><span class="dot"></span> checking</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="label">Android</span>
+                    <span id="sAndroid" class="value" style="color:var(--text-2)">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload -->
+        <div class="section">
+            <div class="section-label">Certificate</div>
+            <div class="upload-card">
+                <div class="upload-area" id="dropZone">
+                    <div class="ic">📄</div>
+                    <div class="t1">Select certificate file</div>
+                    <div class="t2">Use hash filename format (.0), example: 243f0bfb.0</div>
+                    <input type="file" id="fileIn" accept=".0">
+                </div>
+                <div class="file-row" id="fileRow">
+                    <span class="name" id="fName">—</span>
+                    <span class="size" id="fSize">—</span>
+                    <button class="rm" onclick="clearFile()">✕</button>
+                </div>
+                <div class="progress" id="prog"><div class="bar" id="progBar"></div></div>
+                <button class="btn btn-primary" id="installBtn" disabled onclick="install()">Install Certificate</button>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="section">
+            <div class="section-label">Actions</div>
+            <div class="card">
+                <div class="action-item" onclick="reinject()">
+                    <div class="a-icon blue">💉</div>
+                    <div class="a-text">
+                        <div class="a-title">Re-inject Certificate</div>
+                        <div class="a-desc">Force APEX namespace injection</div>
+                    </div>
+                    <span class="arrow">›</span>
+                </div>
+                <div class="action-item" onclick="toggleLog()">
+                    <div class="a-icon amber">📋</div>
+                    <div class="a-text">
+                        <div class="a-title">View Logs</div>
+                        <div class="a-desc">Module operation logs</div>
+                    </div>
+                    <span class="arrow">›</span>
+                </div>
+                <div class="action-item" onclick="checkAll()">
+                    <div class="a-icon green">🔄</div>
+                    <div class="a-text">
+                        <div class="a-title">Refresh Status</div>
+                        <div class="a-desc">Recheck module and certificate</div>
+                    </div>
+                    <span class="arrow">›</span>
+                </div>
+                <div class="action-item" onclick="showReboot()">
+                    <div class="a-icon red">⏻</div>
+                    <div class="a-text">
+                        <div class="a-title">Reboot Device</div>
+                        <div class="a-desc">Apply pending changes</div>
+                    </div>
+                    <span class="arrow">›</span>
+                </div>
+            </div>
+            <div class="log-box" id="logBox"></div>
+        </div>
+
+        <div class="foot">
+            <a href="https://github.com/firdausmntp/ProxyPin-cert-installer">GitHub</a>
+            &nbsp;·&nbsp;
+            <a href="https://github.com/wanghongenpin/network_proxy_flutter">ProxyPin</a>
+        </div>
+    </div>
+
+<script>
+const MOD = '/data/adb/modules/proxypin-cert-installer';
+const CERTS = MOD + '/system/etc/security/cacerts';
+const LOG = '/data/local/tmp/ProxyPinCert.log';
+
+function exec(cmd) {
+    return new Promise((resolve, reject) => {
+        const cb = '_c' + Date.now() + Math.random().toString(36).slice(2,6);
+        window[cb] = (e, out, err) => { delete window[cb]; e === 0 ? resolve(out||'') : reject(new Error(err||'err')); };
+        try { ksu.exec(cmd, '{}', cb); } catch(x) { delete window[cb]; reject(x); }
+    });
+}
+
+async function run(cmd) { try { return await exec(cmd); } catch(e) { return ''; } }
+
+// Toast
+function toast(msg, type='inf') {
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.textContent = msg;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 250); }, 3000);
+}
+
+// Status
+async function checkAll() {
+    const sM = document.getElementById('sModule');
+    const sC = document.getElementById('sCert');
+    const sA = document.getElementById('sApex');
+    const sV = document.getElementById('sAndroid');
+
+    // Module
+    try {
+        const exists = (await run(`[ -d "${MOD}" ] && echo y`)).trim();
+        const disabled = (await run(`[ -f "${MOD}/disable" ] && echo y`)).trim();
+        if (exists === 'y' && disabled !== 'y') sM.innerHTML = '<span class="chip ok"><span class="dot"></span> Active</span>';
+        else if (disabled === 'y') sM.innerHTML = '<span class="chip warn"><span class="dot"></span> Disabled</span>';
+        else sM.innerHTML = '<span class="chip err"><span class="dot"></span> Not found</span>';
+    } catch(e) { sM.innerHTML = '<span class="chip warn"><span class="dot"></span> Unknown</span>'; }
+
+    // Cert
+    try {
+        const n = parseInt((await run(`find "${CERTS}" -maxdepth 1 -type f -name "*.0" 2>/dev/null | wc -l`)).trim()) || 0;
+        if (n > 0) sC.innerHTML = '<span class="chip ok"><span class="dot"></span> Installed (' + n + ')</span>';
+        else sC.innerHTML = '<span class="chip err"><span class="dot"></span> Missing</span>';
+    } catch(e) { sC.innerHTML = '<span class="chip warn"><span class="dot"></span> Error</span>'; }
+
+    // APEX
+    try {
+        const api = parseInt((await run('getprop ro.build.version.sdk')).trim()) || 0;
+        if (api >= 34) {
+            const cn = (await run(`find "${CERTS}" -maxdepth 1 -type f -name "*.0" 2>/dev/null | head -1 | xargs basename 2>/dev/null`)).trim();
+            if (cn) {
+                const ok = (await run(`[ -f "/apex/com.android.conscrypt/cacerts/${cn}" ] && echo y`)).trim();
+                sA.innerHTML = ok === 'y'
+                    ? '<span class="chip ok"><span class="dot"></span> Injected</span>'
+                    : '<span class="chip warn"><span class="dot"></span> Pending</span>';
+            } else {
+                sA.innerHTML = '<span class="chip err"><span class="dot"></span> No cert</span>';
+            }
+        } else {
+            sA.innerHTML = '<span class="chip info"><span class="dot"></span> N/A</span>';
+        }
+    } catch(e) { sA.innerHTML = '<span class="chip info"><span class="dot"></span> N/A</span>'; }
+
+    // Android
+    try {
+        const ver = (await run('getprop ro.build.version.release')).trim();
+        const api = (await run('getprop ro.build.version.sdk')).trim();
+        sV.textContent = ver + ' (API ' + api + ')';
+    } catch(e) { sV.textContent = '—'; }
+}
+
+// File
+const fileIn = document.getElementById('fileIn');
+const dropZone = document.getElementById('dropZone');
+
+fileIn.addEventListener('change', onFile);
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); fileIn.files = e.dataTransfer.files; onFile(); });
+
+function onFile() {
+    const f = fileIn.files[0];
+    if (!f) return;
+    const certName = f.name.trim().toLowerCase();
+    const ok = /^[0-9a-f]{8}\.0$/.test(certName);
+    if (!ok) {
+        toast('Filename must be hash format: 8 hex chars + .0', 'err');
+        fileIn.value = '';
+        return;
+    }
+    document.getElementById('fName').textContent = f.name;
+    document.getElementById('fSize').textContent = fmt(f.size);
+    document.getElementById('fileRow').classList.add('show');
+    document.getElementById('installBtn').disabled = false;
+}
+
+function clearFile() {
+    fileIn.value = '';
+    document.getElementById('fileRow').classList.remove('show');
+    document.getElementById('installBtn').disabled = true;
+}
+
+function fmt(b) {
+    if (b < 1024) return b + ' B';
+    return (b/1024).toFixed(1) + ' KB';
+}
+
+// Install
+async function install() {
+    const f = fileIn.files[0];
+    if (!f) return;
+    const certName = f.name.trim().toLowerCase();
+    if (!/^[0-9a-f]{8}\.0$/.test(certName)) {
+        toast('Invalid certificate filename', 'err');
+        return;
+    }
+
+    const btn = document.getElementById('installBtn');
+    const prog = document.getElementById('prog');
+    const bar = document.getElementById('progBar');
+    const tmpPath = '/data/local/tmp/proxypin-upload.cert';
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> Installing...';
+    prog.classList.add('show');
+    bar.style.width = '30%';
+
+    try {
+        const b64 = await new Promise((ok, no) => {
+            const r = new FileReader();
+            r.onload = () => ok(r.result.split(',')[1]);
+            r.onerror = no;
+            r.readAsDataURL(f);
+        });
+        bar.style.width = '60%';
+        await run(`mkdir -p "${CERTS}"; rm -f "${tmpPath}"`);
+        await run(`echo '${b64}' | base64 -d > "${tmpPath}"`);
+        await run(`install -m 0644 -o 0 -g 0 "${tmpPath}" "${CERTS}/${certName}"`);
+        await run(`rm -f "${tmpPath}"`);
+        bar.style.width = '90%';
+        const v = (await run(`[ -f "${CERTS}/${certName}" ] && echo y`)).trim();
+        if (v === 'y') {
+            bar.style.width = '100%';
+            toast('Certificate installed. Reboot to apply.', 'ok');
+            setTimeout(() => { clearFile(); prog.classList.remove('show'); bar.style.width='0'; checkAll(); }, 1200);
+        } else throw new Error('Write failed');
+    } catch(e) {
+        toast('Install failed: ' + e.message, 'err');
+        prog.classList.remove('show');
+        bar.style.width = '0';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Install Certificate';
+}
+
+// Actions
+async function reinject() {
+    toast('Running re-injection...', 'inf');
+    await run(`sh ${MOD}/service.sh`);
+    toast('Re-injection done', 'ok');
+    setTimeout(checkAll, 800);
+}
+
+let logOpen = false;
+async function toggleLog() {
+    const box = document.getElementById('logBox');
+    if (logOpen) { box.classList.remove('show'); logOpen = false; return; }
+    const raw = await run(`tail -60 "${LOG}" 2>/dev/null || echo "No logs available"`);
+    const lines = raw.split('\n').filter(l => l.trim());
+    box.innerHTML = lines.map(l => {
+        let c = '';
+        if (/✓|SUCCESS/.test(l)) c = 'g';
+        else if (/ERROR|✗|FAIL/.test(l)) c = 'r';
+        else if (/WARNING|⚠/.test(l)) c = 'y';
+        else if (/═|╔|╚|===/.test(l)) c = 'b';
+        return '<div class="l ' + c + '">' + esc(l) + '</div>';
+    }).join('');
+    box.classList.add('show');
+    box.scrollTop = box.scrollHeight;
+    logOpen = true;
+}
+
+function esc(s) { const d = document.createElement('span'); d.textContent = s; return d.innerHTML; }
+
+function showReboot() { document.getElementById('rebootModal').classList.add('show'); }
+function closeModal() { document.getElementById('rebootModal').classList.remove('show'); }
+async function doReboot() { closeModal(); toast('Rebooting...', 'inf'); await run('reboot'); }
+
+document.addEventListener('DOMContentLoaded', checkAll);
+</script>
+</body>
+</html>

@@ -1,17 +1,39 @@
-# Miscellaneous
-*.class
+# Build artifacts
+*.zip
+*.tar.gz
+build/
+dist/
+_build_temp/
+
+# Build scripts (personal use only)
+build.py
+build.sh
+build.bat
+
+# Logs
 *.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.buildlog/
-.history
-.svn/
-migrate_working_dir/
-Podfile.lock
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
+ProxyPinCert.log
+ProxyPinCA.log
+
+# IDE
 .idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# Temp
+*.tmp
+*.temp
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

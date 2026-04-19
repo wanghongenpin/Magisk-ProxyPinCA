@@ -1,6 +1,11 @@
-id=ProxyPinCA
-name=ProxyPinCA
-version=1.2.0
-versionCode=3
-author=ProxyPin
-description=ProxyPin certificate.
+id=proxypin-cert-installer
+name=ProxyPin Certificate Installer
+version=v1.0
+versionCode=1
+author=firdausmntp
+description=Install ProxyPin CA certificate to System CA Store. Supports Magisk/KernelSU/SukiSU/APatch. Android 5.0-15 compatible with APEX bypass for Android 14+.
+updateJson=https://raw.githubusercontent.com/firdausmntp/ProxyPin-cert-installer/main/update.json
+support=https://github.com/firdausmntp/ProxyPin-cert-installer
+donate=https://github.com/sponsors/firdausmntp
+minApi=21
+maxApi=36

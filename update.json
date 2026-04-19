@@ -1,0 +1,6 @@
+{
+  "version": "v1.0",
+  "versionCode": 1,
+  "zipUrl": "https://github.com/firdausmntp/ProxyPin-cert-installer/releases/download/v1.0/ProxyPin-Cert-Installer-v1.0.zip",
+  "changelog": "v1.0 (2026-04-16)\n- Initial release\n- ProxyPin CA certificate pre-included (243f0bfb.0)\n- Multi-root support (Magisk/KernelSU/SukiSU/APatch)\n- Android 5.0-15+ support\n- APEX CA bypass for Android 14+\n- WebUI for status monitoring\n- SELinux enforcing compatible"
+}

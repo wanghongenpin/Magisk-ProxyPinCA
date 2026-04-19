@@ -1,0 +1,170 @@
+name: Build and Release Module
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  MODULE_ID: proxypin-cert-installer
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Get version info
+      id: version
+      run: |
+        VERSION=$(grep 'version=' module.prop | cut -d'=' -f2)
+        VERSION_CODE=$(grep 'versionCode=' module.prop | cut -d'=' -f2)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+
+    - name: Validate module structure
+      run: |
+        echo "🔍 Validating module structure..."
+
+        # Check required files
+        required_files=("module.prop" "customize.sh" "post-fs-data.sh" "service.sh" "action.sh" "uninstall.sh" "META-INF/com/google/android/update-binary" "META-INF/com/google/android/updater-script")
+        for file in "${required_files[@]}"; do
+          if [ ! -f "$file" ]; then
+            echo "❌ Missing required file: $file"
+            exit 1
+          fi
+          echo "✅ Found: $file"
+        done
+
+        # Check certificate directory exists
+        if [ ! -d "system/etc/security/cacerts" ]; then
+          echo "❌ Missing certificate directory"
+          exit 1
+        fi
+        echo "✅ Certificate directory exists"
+
+        # Check certificate exists
+        if [ ! -f "system/etc/security/cacerts/243f0bfb.0" ]; then
+          echo "⚠️ Warning: ProxyPin certificate not found"
+        fi
+
+        echo "✅ Module structure validated!"
+
+    - name: Make scripts executable
+      run: |
+        chmod +x post-fs-data.sh
+        chmod +x service.sh
+        chmod +x customize.sh
+        chmod +x action.sh
+        chmod +x uninstall.sh
+        chmod +x META-INF/com/google/android/update-binary
+
+    - name: Build module ZIP
+      run: |
+        MODULE_NAME="ProxyPin-Cert-Installer-${{ steps.version.outputs.version }}"
+
+        echo "📦 Building $MODULE_NAME.zip..."
+
+        # Create zip with only required files
+        zip -r9 "${MODULE_NAME}.zip" \
+          module.prop \
+          customize.sh \
+          post-fs-data.sh \
+          service.sh \
+          action.sh \
+          uninstall.sh \
+          update.json \
+          META-INF/ \
+          system/ \
+          webroot/
+
+        echo "✅ Module built: ${MODULE_NAME}.zip"
+        echo "module_zip=${MODULE_NAME}.zip" >> $GITHUB_ENV
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: proxypin-cert-installer-${{ steps.version.outputs.version }}
+        path: ${{ env.module_zip }}
+        retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Get version info
+      id: version
+      run: |
+        VERSION=$(grep 'version=' module.prop | cut -d'=' -f2)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Make scripts executable
+      run: |
+        chmod +x post-fs-data.sh
+        chmod +x service.sh
+        chmod +x customize.sh
+        chmod +x action.sh
+        chmod +x uninstall.sh
+        chmod +x META-INF/com/google/android/update-binary
+
+    - name: Build release ZIP
+      run: |
+        MODULE_NAME="ProxyPin-Cert-Installer-${{ steps.version.outputs.version }}"
+
+        zip -r9 "${MODULE_NAME}.zip" \
+          module.prop \
+          customize.sh \
+          post-fs-data.sh \
+          service.sh \
+          action.sh \
+          uninstall.sh \
+          update.json \
+          META-INF/ \
+          system/ \
+          webroot/
+
+        echo "module_zip=${MODULE_NAME}.zip" >> $GITHUB_ENV
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        echo "## ProxyPin Certificate Installer ${{ steps.version.outputs.version }}" > RELEASE_NOTES.md
+        echo "" >> RELEASE_NOTES.md
+        echo "**Author:** [firdausmntp](https://github.com/firdausmntp)" >> RELEASE_NOTES.md
+        echo "" >> RELEASE_NOTES.md
+        echo "### Features" >> RELEASE_NOTES.md
+        echo "- ✅ Universal root support (Magisk/KernelSU/SukiSU/APatch)" >> RELEASE_NOTES.md
+        echo "- ✅ Android 5.0 - 16 (API 21-36) support" >> RELEASE_NOTES.md
+        echo "- ✅ **APEX CA bypass for Android 14+**" >> RELEASE_NOTES.md
+        echo "- ✅ WebUI for status monitoring" >> RELEASE_NOTES.md
+        echo "- ✅ ProxyPin certificate pre-included" >> RELEASE_NOTES.md
+        echo "- ✅ SELinux enforcing compatible" >> RELEASE_NOTES.md
+        echo "" >> RELEASE_NOTES.md
+        echo "### Installation" >> RELEASE_NOTES.md
+        echo "1. Download the ZIP file below" >> RELEASE_NOTES.md
+        echo "2. Install via Magisk/KernelSU/SukiSU/APatch Manager" >> RELEASE_NOTES.md
+        echo "3. Reboot device" >> RELEASE_NOTES.md
+        echo "" >> RELEASE_NOTES.md
+        echo "### Important for Android 14+" >> RELEASE_NOTES.md
+        echo "This module includes APEX bypass to inject certificates into \`com.android.conscrypt\` APEX." >> RELEASE_NOTES.md
+        echo "If ProxyPin shows 'Certificate Not Installed', check logs at \`/data/local/tmp/ProxyPinCert.log\`" >> RELEASE_NOTES.md
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ env.module_zip }}
+        body_path: RELEASE_NOTES.md
